@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Session to Auth JSON</title>
+  <style>
+    *{box-sizing:border-box;margin:0}
+    body{font-family:system-ui,sans-serif;background:#f0f2f5;min-height:100vh;padding:24px}
+    .container{max-width:900px;margin:0 auto}
+    h1{font-size:1.4rem;margin-bottom:4px}
+    .desc{color:#666;font-size:.9rem;margin-bottom:20px}
+    .panels{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    @media(max-width:700px){.panels{grid-template-columns:1fr}}
+    .panel{background:#fff;border-radius:10px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    .panel h2{font-size:.85rem;color:#888;margin-bottom:8px}
+    textarea{width:100%;height:280px;border:1px solid #ddd;border-radius:6px;padding:10px;font-family:monospace;font-size:.82rem;resize:vertical}
+    textarea:focus{outline:none;border-color:#0f766e}
+    .actions{display:flex;gap:10px;margin:16px 0;flex-wrap:wrap}
+    button{padding:8px 18px;border:none;border-radius:6px;cursor:pointer;font-size:.9rem;transition:opacity .15s}
+    button:hover{opacity:.85}
+    button:disabled{opacity:.4;cursor:not-allowed}
+    .btn-primary{background:#0f766e;color:#fff}
+    .btn-secondary{background:#e5e7eb;color:#333}
+    .msg{padding:10px 12px;border-radius:6px;font-size:.85rem;margin-top:12px;display:none}
+    .msg.ok{display:block;background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
+    .msg.err{display:block;background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Session to Auth JSON</h1>
+    <p class="desc">将 ChatGPT Session JSON 转换为 CLIProxyAPI auth.json 格式（纯本地转换，不发送任何数据）</p>
+    <div class="actions">
+      <button class="btn-primary" id="btnConvert">转换</button>
+      <button class="btn-secondary" id="btnPaste">粘贴</button>
+      <button class="btn-secondary" id="btnCopy" disabled>复制结果</button>
+      <button class="btn-secondary" id="btnDownload" disabled>下载 auth.json</button>
+      <button class="btn-secondary" id="btnClear">清空</button>
+    </div>
+    <div class="panels">
+      <div class="panel">
+        <h2>源 Session JSON</h2>
+        <textarea id="input" placeholder='粘贴 session JSON，包含 accessToken 和 account.id'></textarea>
+      </div>
+      <div class="panel">
+        <h2>输出 Auth JSON</h2>
+        <textarea id="output" readonly></textarea>
+      </div>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+  <script>
+    const input=document.getElementById('input'),output=document.getElementById('output'),msg=document.getElementById('msg');
+    const btnConvert=document.getElementById('btnConvert'),btnCopy=document.getElementById('btnCopy');
+    const btnDownload=document.getElementById('btnDownload'),btnClear=document.getElementById('btnClear');
+    const btnPaste=document.getElementById('btnPaste');
+
+    function show(text,type){msg.textContent=text;msg.className='msg '+type}
+
+    function convert(){
+      const src=input.value.trim();
+      if(!src){output.value='';show('请输入源 JSON','err');update();return}
+      let obj;
+      try{obj=JSON.parse(src)}catch(e){show('JSON 解析失败: '+e.message,'err');output.value='';update();return}
+      if(!obj.accessToken){show('缺少 accessToken 字段','err');output.value='';update();return}
+      if(!obj.account||!obj.account.id){show('缺少 account.id 字段','err');output.value='';update();return}
+      const now=new Date().toISOString().replace('Z','000Z');
+      const result={last_refresh:now,tokens:{access_token:obj.accessToken,account_id:obj.account.id,id_token:obj.accessToken,refresh_token:obj.accessToken}};
+      output.value=JSON.stringify(result,null,2)+'\n';
+      show('转换成功','ok');update()
+    }
+
+    function update(){btnCopy.disabled=!output.value;btnDownload.disabled=!output.value}
+
+    btnConvert.addEventListener('click',convert);
+    btnClear.addEventListener('click',()=>{input.value='';output.value='';msg.className='msg';update()});
+    btnCopy.addEventListener('click',async()=>{
+      await navigator.clipboard.writeText(output.value);show('已复制到剪贴板','ok')
+    });
+    btnDownload.addEventListener('click',()=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([output.value],{type:'application/json'}));
+      a.download='auth.json';a.click();URL.revokeObjectURL(a.href);show('已下载','ok')
+    });
+    btnPaste.addEventListener('click',async()=>{
+      try{input.value=await navigator.clipboard.readText();convert()}catch{show('无法读取剪贴板','err')}
+    });
+    input.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')convert()});
+  </script>
+</body>
+</html>
